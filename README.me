@@ -2,7 +2,7 @@ Welcome to the AI Mock Interviewer!
 
 The provided code defines a sophisticated AI mock interviewer using a combination of Gradio, Speech Recognition, Google Text-to-Speech (gTTS), and the Hugging Face Inference API. This model is designed to simulate a realistic interview environment, allowing users to practice and improve their interview skills. 
 
-=>Key Features of the Code
+=>KEY FEATURES OF THE CODE
 
       1.AI-Powered Mock Interview System:Utilizes the Hugging Face language model for generating interview questions and evaluating responses.
 
@@ -25,7 +25,7 @@ The provided code defines a sophisticated AI mock interviewer using a combinatio
      10. Scalability and Flexibility:Designed to be easily extendable with additional functionalities or models, supporting various interview scenarios and topics.
 
 
-INTERVIEW INTERFACE OVERVIEW
+=>INTERVIEW INTERFACE OVERVIEW
 
 The code implements an interactive mock interview system using Gradio. Here's a detailed overview of the interface and its components:
 
@@ -78,32 +78,34 @@ The code implements an interactive mock interview system using Gradio. Here's a 
 
 This interactive interface simulates a realistic interview environment, offering comprehensive practice and feedback to users preparing for actual interviews.
 
-### Model Configuration
+=>MODEL CONFIGURATION
 
 The code uses various models and services integrated through the Hugging Face Hub and other APIs to facilitate the mock interview. Here’s a summary of the model configurations and integrations:
 
-1. **Hugging Face InferenceClient for Question Generation:**
-   - **Model:** `meta-llama/Meta-Llama-3-8B-Instruct`
-   - **Purpose:** Generates interview questions based on the specified topic, position, and difficulty.
-   - **API Token:** `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`
+      Hugging Face InferenceClient for Question Generation:
+            Model: meta-llama/Meta-Llama-3-8B-Instruct
+            Purpose: Generates interview questions based on the specified topic, position, and difficulty.
+            API Token: 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
 
-2. **Hugging Face Inference API for Facial Expression Recognition:**
-   - **Model:** `trpakov/vit-face-expression`
-   - **Purpose:** Analyzes facial expressions from video frames to provide sentiment analysis.
-   - **API URL:** `https://api-inference.huggingface.co/models/trpakov/vit-face-expression`
-   - **API Token:** `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`
+      Hugging Face Inference API for Facial Expression Recognition:
+            Model: trpakov/vit-face-expression
+            Purpose: Analyzes facial expressions from video frames to provide sentiment analysis.
+            API URL: https://api-inference.huggingface.co/models/trpakov/vit-face-expression
+            API Token: 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
 
-3. **Text-to-Speech (TTS) Integration:**
-   - **Library:** `gTTS (Google Text-to-Speech)`
-   - **Purpose:** Converts text to speech for audio playback of questions and feedback.
-   - **Output Format:** MP3 files (e.g., `question.mp3`, `temp.mp3`)
+      Text-to-Speech (TTS) Integration:
+            Library: gTTS (Google Text-to-Speech)
+            Purpose: Converts text to speech for audio playback of questions and feedback.
+            Output Format: MP3 files (e.g., question.mp3, temp.mp3)
 
-4. **Speech Recognition:**
-   - **Library:** `speech_recognition` (using Google Speech-to-Text API)
-   - **Purpose:** Converts spoken responses into text.
+      Speech Recognition:
+            Library: speech_recognition (using Google Speech-to-Text API)
+            Purpose: Converts spoken responses into text.
 
-5. **OpenCV:**
-   - **Library:** `cv2`
-   - **Purpose:** Captures video frames for facial expression analysis.
+      OpenCV:
+            Library: cv2
+            Purpose: Captures video frames for facial expression analysis.
 
 This combination of models and APIs enables a comprehensive mock interview system that generates, verifies, and assesses interview responses, while providing real-time feedback and sentiment analysis.
+
+
