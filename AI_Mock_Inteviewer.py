@@ -1,57 +1,16 @@
 import gradio as gr
-import cv2
-import requests
-import os
-from collections import Counter
+import speech_recognition as sr
 from gtts import gTTS
 from huggingface_hub import InferenceClient
-import speech_recognition as sr
+import os
 import time
 from IPython.display import Audio, display
 
 # Set up the InferenceClient
-client = InferenceClient("meta-llama/Meta-Llama-3-8B-Instruct", token="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")
-API_URL = "https://api-inference.huggingface.co/models/trpakov/vit-face-expression"
-headers = {"Authorization": "Bearer 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"}
-
-def query(filename):
-    with open(filename, "rb") as f:
-        data = f.read()
-    response = requests.post(API_URL, headers=headers, data=data)
-    return response.json()
-
-def predict(video_path):
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        return "Error: Could not open video."
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_skip = int(fps * 1)
-    label_counts = Counter()
-    frame_count = 0
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        if frame_count % frame_skip == 0:
-            cv2.imwrite("temp.jpg", frame)
-            output = query("temp.jpg")
-            os.remove("temp.jpg")
-
-            if isinstance(output, list):
-                max_label = max(output, key=lambda x: x['score'])['label']
-                label_counts[max_label] += 1
-        frame_count += 1
-
-    cap.release()
-
-    if len(label_counts) == 0:
-        return "No valid frames detected."
-
-    most_common_labels = label_counts.most_common(1)
-    result_labels = [label for label, count in most_common_labels]
-    return ", ".join(result_labels)
+client = InferenceClient(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    token="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",
+)
 
 def get_system_prompt(topic):
     return f"You are an AI mock interviewer with expertise in {topic}. Your job is to conduct a realistic and challenging mock interview for the candidate. Your questions should evaluate the candidate's knowledge, problem-solving skills, and ability to apply concepts in practical scenarios. Ensure the interview is thorough, engaging, and covers various aspects of the role without repeating questions."
@@ -70,13 +29,7 @@ def generate_question(topic, position, difficulty, previous_questions=[], max_ne
     for chunk in response:
         generated_text += chunk.choices[0].delta.content or ""
     question = generated_text.strip()
-    
-    # Generate and save speech for the question
-    speech_file = "question.mp3"
-    tts = gTTS(question)
-    tts.save(speech_file)
-    
-    return question, speech_file
+    return question
 
 def verify_answer(topic, position, user_answer, question):
     messages = [{"role": "user", "content": f"Tell the user if the answer {user_answer} is right or wrong in relevance to the question {question}. Tell right or wrong only. Add a 1 line explanation. Don't provide the answer to {question}."}]
@@ -111,9 +64,9 @@ def speak(text):
     tts.save(filename)
     return filename
 
-def play_audio(filename): 
+def play_audio(filename):
     display(Audio(filename, autoplay=True))
-    time.sleep(2)
+    time.sleep(2)  # Adjust the sleep duration if needed
 
 def welcome_message():
     message = "Welcome to our AI mock interviewer!\n"
@@ -139,7 +92,7 @@ def recognize_speech(audio_file):
     return text
 
 def generate_feedback(correct_answers, total_answers, conversation_history):
-    accuracy = correct_answers / total_answers if total_answers > 0 else 0
+    accuracy = correct_answers / total_answers
     history_str = "\n".join([f"{entry['role']}: {entry['content']}" for entry in conversation_history])
 
     feedback_prompt = (
@@ -162,34 +115,39 @@ def conduct_interview(topic, position, difficulty):
     question_count = 1
     previous_questions = []
     conversation_history = []
+
+    question = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
+    previous_questions.append(question)
+    play_audio(speak(question))
+    conversation_history.append({"role": "interviewer", "content": question})
+
     correct_answers = 0
     total_answers = 0
-    
-    # Initial question
-    question, speech_file = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
-    previous_questions.append(question)
-    
-    def handle_answer(audio_file, video_file=None):
-        nonlocal question, question_count, correct_answers, total_answers
-        
-        if video_file:
-            sentiment = predict(video_file)
-            sentiment_message = f"Detected sentiment: {sentiment}. This might affect the interview flow."
-            play_audio(speak(sentiment_message))
-            conversation_history.append({"role": "interviewer", "content": sentiment_message})
 
+    def handle_answer(audio_file):
+        nonlocal question, question_count, correct_answers, total_answers
         user_answer = recognize_speech(audio_file)
         conversation_history.append({"role": "candidate", "content": user_answer})
+
         if user_answer.lower() == 'finish interview':
             end_message = "Interview finished!"
             play_audio(speak(end_message))
-            return end_message, generate_feedback(correct_answers, total_answers, conversation_history), None
-        
+            return question, end_message  # Return end message as feedback
+
         if question_count == 1:
-            response = "It's great to hear about your innovative ideas. I wish you all the best for your future endeavors!"
+            # Provide a fixed response for the first question
+            response = "It's great to hear about your innovative ideas. I wish you all the best for your future projects. Let's proceed with the interview."
             play_audio(speak(response))
             conversation_history.append({"role": "interviewer", "content": response})
+            # Proceed to the next question
+            question_count += 1
+            question = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
+            previous_questions.append(question)
+            play_audio(speak(question))
+            conversation_history.append({"role": "interviewer", "content": question})
+            return question, response
         else:
+            # For subsequent questions, perform verification and hint generation
             verification = verify_answer(topic, position, user_answer, question)
             play_audio(speak(verification))
             conversation_history.append({"role": "interviewer", "content": verification})
@@ -198,10 +156,11 @@ def conduct_interview(topic, position, difficulty):
                 correct_answers += 1
                 total_answers += 1
                 question_count += 1
-                question, speech_file = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
+                question = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
                 previous_questions.append(question)
                 play_audio(speak(question))
                 conversation_history.append({"role": "interviewer", "content": question})
+                return question, verification
             else:
                 total_answers += 1
                 hint = generate_hint(topic, user_answer, question)
@@ -216,75 +175,92 @@ def conduct_interview(topic, position, difficulty):
 
                 if "right" in verification.lower():
                     question_count += 1
-                    question, speech_file = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
+                    question = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
                     previous_questions.append(question)
                     play_audio(speak(question))
                     conversation_history.append({"role": "interviewer", "content": question})
+                    return question, verification
                 else:
                     correct_answer = get_correct_answer(topic, position, question)
                     play_audio(speak(f"Correct answer: {correct_answer}"))
                     conversation_history.append({"role": "interviewer", "content": f"Correct answer: {correct_answer}"})
                     question_count += 1
-                    question, speech_file = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
+                    question = generate_question(topic, position, difficulty, previous_questions, question_count=question_count)
                     previous_questions.append(question)
                     play_audio(speak(question))
                     conversation_history.append({"role": "interviewer", "content": question})
-        return question, speech_file
+                    return question, verification
 
     return question, handle_answer
 
-def gradio_interface():
-    with gr.Blocks(theme=gr.themes.Default()) as demo:
-        gr.Markdown("### Mock Interview")
-        
-        # Input fields for initial details
-        topic_input = gr.Textbox(label="Topic")
-        position_input = gr.Textbox(label="Position")
-        difficulty_input = gr.Radio(label="Difficulty", choices=["easy", "medium", "hard"])
-        
-        # Button to start the interview
-        start_button = gr.Button("Start Interview")
-        
-        # Output components
-        question_output = gr.Textbox(label="Question", interactive=False)
-        audio_output = gr.Audio(label="Question Audio", type="filepath")
-        handle_answer_output = gr.State()
-        audio_input = gr.Audio(label="Your Answer", type="filepath")
-        video_input = gr.Video(label="Your Video")
-        transcribed_output = gr.Textbox(label="Transcribed Answer", interactive=False)
-        sentiment_output = gr.Textbox(label="Sentiment Analysis", interactive=False)
-        
-        # Define the event handler for the start button
-        def start_interview(topic, position, difficulty):
-            question, handle_answer = conduct_interview(topic, position, difficulty)
-            return question, "question.mp3", handle_answer, "", ""
-        
-        # Define the event handler for the submit button
-        def submit_answer(handle_answer, audio, video):
-            if video:
-                sentiment = predict(video)
-                sentiment_output.set(sentiment)
-            
-            if audio:
-                # Handle the transcribed answer
-                user_answer = recognize_speech(audio)
-                question, speech_file = handle_answer(audio, video)
-                
-                if "Interview finished!" in question:
-                    return question, speech_file, "", sentiment_output.value
-                
-                transcribed_output.set(user_answer)
-                return question, speech_file, transcribed_output.value, sentiment_output.value
-            
-            # In case no audio file is provided
-            return "", "", sentiment_output.value, ""
+def gradio_interface(topic, position, difficulty):
+    # Initialize the interview process
+    question, handle_answer = conduct_interview(topic, position, difficulty)
 
-        start_button.click(fn=start_interview, inputs=[topic_input, position_input, difficulty_input], outputs=[question_output, audio_output, handle_answer_output, transcribed_output, sentiment_output])
+    def next_question(audio_file):
+        nonlocal question
+
+        if audio_file:
+            # Handle the transcribed answer
+            question, feedback = handle_answer(audio_file)
+            if "Interview finished!" in feedback:
+                return question, feedback  # Return response instead of empty string
+
+            return question, feedback  # Return response instead of empty string
+
+        # In case no audio file is provided
+        return question, ""
+
+    def transcribe_audio(audio_file):
+        # Transcribe the audio file
+        return recognize_speech(audio_file)
+
+    with gr.Blocks(theme=gr.themes.Default()) as demo:
+        gr.Markdown(f"### Mock Interview on {topic} for {position} position at {difficulty} difficulty level")
+
+
+
+        # Textbox for displaying the interview question
+        question_output = gr.Textbox(label="Question", interactive=False)
+        question_output.value = question
+
+        # Audio input for user's answer
+        audio_input = gr.Audio(label="Your Answer", type="filepath")
+
+        # Textbox for displaying the transcribed answer
+        transcribed_output = gr.Textbox(label="Transcribed Answer", interactive=False)
+
+        # Button to transcribe audio
+        transcribe_button = gr.Button("Transcribe Audio")
+
+        # Button to submit the answer
         submit_button = gr.Button("Submit Answer")
-        submit_button.click(fn=submit_answer, inputs=[handle_answer_output, audio_input, video_input], outputs=[question_output, audio_output, transcribed_output, sentiment_output])
-    
+
+        # Textbox for displaying the interviewer's response
+        feedback_output = gr.Textbox(label="Interviewer’s Response", interactive=False)
+
+        # Set up button click events
+        transcribe_button.click(fn=transcribe_audio, inputs=audio_input, outputs=transcribed_output)
+        submit_button.click(next_question, inputs=audio_input, outputs=[question_output, feedback_output])
+
     # Launch the Gradio interface
     demo.launch(debug=True)
 
-# Start the Gradio interface
-gradio_interface()
+# Play welcome message
+welcome_message()
+
+# Get user name and greet
+user_name = get_user_name()
+
+# Get domain and position from user
+play_audio(speak("What topic would you like to discuss? "))
+topic = input("What topic would you like to discuss? ")
+
+play_audio(speak("What position are you applying for? "))
+position = input("What position are you applying for? ")
+
+play_audio(speak("What difficulty level would you like the questions to be? "))
+difficulty = input("What difficulty level would you like the questions to be? (easy, medium, hard) ")
+
+# Start the mock interview using Gradio interface
+gradio_interface(topic, position, difficulty)
